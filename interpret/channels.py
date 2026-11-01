@@ -15,11 +15,16 @@ from pydantic import BaseModel
 
 class ChannelInfo(BaseModel):
     name: str
+    display_name: Optional[str] = None  # report label; defaults to name
     unit: str = "degC"
     height: str  # foot, breath, head, ...
     row: int
     side: Optional[str] = None
     sensor_range: Optional[tuple[float, float]] = None
+
+    @property
+    def label(self) -> str:
+        return self.display_name or self.name
 
     @property
     def location_group(self) -> str:

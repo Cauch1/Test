@@ -35,7 +35,7 @@ def _channel_summary(df, ch: ChannelInfo, phases) -> ChannelSummary:
         m = (t_min >= p.start_min) & (t_min < p.end_min)
         phase_means[p.id] = _r(s[m].mean())
     return ChannelSummary(
-        name=ch.name, unit=ch.unit, location_group=ch.location_group,
+        name=ch.name, display_name=ch.label, unit=ch.unit, location_group=ch.location_group,
         min=_r(s.min()), max=_r(s.max()), phase_means=phase_means,
         quality=ChannelQuality(nan_fraction=_r(s.isna().mean())),
     )

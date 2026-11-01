@@ -55,6 +55,7 @@ class ChannelQuality(_Strict):
 
 class ChannelSummary(_Strict):
     name: str
+    display_name: str
     unit: str
     location_group: str
     min: Optional[float]
@@ -90,6 +91,7 @@ class Check(_Strict):
 
 
 class Criterion(_Strict):
+    id: str = Field(description="Placeholder key; from the spec YAML id, or the metric name")
     name: str
     metric: str
     comparator: Literal["<=", ">=", "<", ">"]

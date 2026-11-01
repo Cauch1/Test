@@ -1,9 +1,10 @@
 """Stage B: summary JSON -> model -> validated commentary, with an audit trail.
 
-Files written next to the summary JSON:
+The model returns templates with placeholder keys; validate() checks them and
+Python fills in the values. Files written next to the summary JSON:
   <test_id>_interpretation_raw.json   raw API response, always written
   <test_id>_validation_log.json       every check result, always written
-  <test_id>_interpretation.json       validated commentary, only if checks pass
+  <test_id>_interpretation.json       filled commentary plus the template, only if checks pass
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ import yaml
 from .client import AnthropicClient, MockClient
 from .commentary import Commentary
 from .schema import Summary
+from .placeholders import build_catalogue, catalogue_text
 from .validate import CommentaryValidationError, validate
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -54,7 +56,10 @@ def build_payload(summary: Summary, cfg: dict) -> str:
     if len(text) > cfg["max_payload_chars"]:
         raise PrivacyError(f"Summary is {len(text)} characters, above max_payload_chars; "
                            "it should hold statistics, not samples")
-    return "Write the commentary for this test summary.\n\n<summary>\n" + text + "\n</summary>"
+    keys = catalogue_text(build_catalogue(summary, cfg["display_decimals"]))
+    return ("Write the commentary for this test summary, using only the placeholder keys "
+            "listed below for any value.\n\n<summary>\n" + text + "\n</summary>\n\n"
+            "<placeholders>\n" + keys + "\n</placeholders>")
 
 
 def make_client(summary: Summary, cfg: dict, offline: bool):
@@ -87,13 +92,17 @@ def interpret(summary_path: str | Path, *, offline: bool = False, cfg: dict | No
     }
     log_path = out_dir / f"{tid}_validation_log.json"
     try:
-        log = validate(result.commentary, summary, rel=cfg["tolerance"]["relative"],
-                       abs_tol=cfg["tolerance"]["absolute"], style_fatal=cfg["style_checks_fatal"])
+        log, filled = validate(result.commentary, summary, rel=cfg["tolerance"]["relative"],
+                               abs_tol=cfg["tolerance"]["absolute"],
+                               style_fatal=cfg["style_checks_fatal"],
+                               decimals=cfg["display_decimals"],
+                               extra_allowlist=cfg.get("digit_allowlist", []))
     except CommentaryValidationError as e:
         log_path.write_text(json.dumps({**meta, **e.log}, indent=2))
         raise
     log_path.write_text(json.dumps({**meta, **log}, indent=2))
     (out_dir / f"{tid}_interpretation.json").write_text(json.dumps(
         {"meta": meta, "status": "DRAFT, engineer review required",
-         "commentary": result.commentary.model_dump()}, indent=2))
-    return result.commentary
+         "commentary": filled.model_dump(),
+         "template": result.commentary.model_dump()}, indent=2))
+    return filled

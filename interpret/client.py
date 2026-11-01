@@ -4,15 +4,17 @@ text (saved to disk for audit) and the parsed Commentary.
 AnthropicClient: the real API, via the official SDK's messages.parse(), which
   sends the Commentary schema as a structured-output format and returns a
   validated pydantic object.
-MockClient: no network. Builds a canned reply from the summary's own values,
-  so the full pipeline (including the number validator) runs offline. Pass
-  canned= to return a fixed reply instead, for testing validator failures.
+MockClient: no network. Builds a canned template reply from the summary's
+  keys, so the full pipeline (placeholder checks, fill, final number
+  assertion) runs offline. Pass canned= to return a fixed reply instead, for
+  testing validator failures.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass
 from typing import Optional
 
@@ -80,17 +82,8 @@ class AnthropicClient:
                             model=resp.model, stop_reason=resp.stop_reason)
 
 
-def _evidence_phrase(key: str, value: float) -> str:
-    """'max_abs_offset_change_degC', 3.12 -> 'max abs offset change 3.12 degC'."""
-    for suffix in ("_degC", "_s", "_min"):
-        if key.endswith(suffix):
-            return f"{key[:-len(suffix)].replace('_', ' ')} {value:g} {suffix[1:]}"
-    unit = " degC" if key in ("min_value", "max_value", "range_low", "range_high") else ""
-    return f"{key.replace('_', ' ')} {value:g}{unit}"
-
-
 class MockClient:
-    """Offline stand-in. Quotes only values present in the summary."""
+    """Offline stand-in. Writes templates with placeholder keys, like the real model."""
 
     model = "mock"
 
@@ -105,47 +98,45 @@ class MockClient:
                             commentary=commentary, model=self.model, stop_reason="end_turn")
 
     def _from_summary(self) -> dict:
+        """A template reply: prose plus placeholder keys, no numeric values."""
         s = self.summary
-        phases = {p.id: p for p in s.test.phases}
-        metrics = {m.name: m for m in s.metrics}
-        pull = phases.get("pull-down")
-        stab = phases.get("stabilised")
+        ids = {p.id for p in s.test.phases}
 
-        para1 = (f"Test {s.test.test_id} was conducted in {s.test.facility} against {s.test.spec_ref}. "
-                 f"Data from {s.counts.n_channels} channels were logged at a "
-                 f"{s.counts.sample_interval_s:g} s interval for {s.counts.duration_min:g} min.")
-        if pull and stab:
-            para1 += (f" The pull-down started at {pull.start_min:g} min and the cabin was "
-                      f"stabilised from {stab.start_min:g} min.")
-        lines = []
-        for m in s.metrics:
-            if m.value is not None:
-                lines.append(f"The {m.name.replace('_', ' ')} was {m.value:g} {m.unit}.")
+        para1 = ("Test {test.id} was conducted in {test.facility} against {test.spec_ref} on "
+                 "{test.run_date}. Data from {counts.n_channels} channels were logged at a "
+                 "{counts.sample_interval} interval for {counts.duration}.")
+        if {"pull-down", "stabilised"} <= ids:
+            para1 += (" The pull-down started at {phase.pull-down.start} and the cabin was "
+                      "stabilised from {phase.stabilised.start}.")
+        lines = [f"The {m.name.replace('_', ' ')} was {{metric.{m.name}}}."
+                 for m in s.metrics if m.value is not None]
         para2 = " ".join(lines) or "No metrics could be computed for this run."
 
         crit = []
         for c in s.criteria:
-            chk = c.all_channels
-            if chk.measured is None:
-                text = f"The {c.name} criterion could not be assessed because the metric was not computed."
+            k = f"criteria.{c.id}"
+            if c.all_channels.measured is None:
+                text = f"The {{{k}.name}} criterion could not be assessed because the metric was not computed."
             elif c.status == "REVIEW_REQUIRED":
-                ex = c.excluding_suspect
-                text = (f"The {c.name} result was {chk.measured:g} {c.unit} with all channels and "
-                        f"{ex.measured:g} {c.unit} without suspect channels, so engineer review is required.")
+                text = (f"The {{{k}.name}} result was {{{k}.measured}} with all channels and "
+                        f"{{{k}.measured_excluding}} without suspect channels "
+                        f"({{metric.{c.metric}.suspect_channels}}), so the status is {{{k}.status}}.")
             else:
-                text = (f"The {c.name} result was {chk.measured:g} {c.unit} against a limit of "
-                        f"{c.limit:g} {c.unit}, a margin of {chk.margin:g} {c.unit}.")
-            crit.append({"criterion": c.name, "comment": text})
+                text = (f"The {{{k}.name}} result was {{{k}.measured}} against a limit of "
+                        f"{{{k}.limit}}, a margin of {{{k}.margin}}.")
+            crit.append({"criterion": c.id, "comment": text})
 
         expl = []
         for a in s.anomalies:
-            ev = ", ".join(_evidence_phrase(k, v) for k, v in a.evidence.items())
+            k = f"anomaly.{a.id}"
+            label = lambda key: re.sub(r"_(degC|s|min)$", "", key).replace("_", " ")
+            ev = ", ".join(f"{label(key)} {{{k}.evidence.{key}}}" for key in a.evidence)
             expl.append({
                 "anomaly_id": a.id,
-                "likely_cause": f"Mock explanation of a {a.type} on {a.channel}.",
-                "evidence": f"Detected from {a.start_min:g} min to {a.end_min:g} min; {ev}.",
+                "likely_cause": f"Mock explanation of a {{{k}.type}} on {{{k}.channel}}.",
+                "evidence": f"Detected from {{{k}.start}} to {{{k}.end}}; {ev}.",
                 "confidence": "low",
-                "suggested_check": f"Inspect the {a.channel} sensor and its wiring.",
+                "suggested_check": f"Inspect the {{{k}.channel}} sensor and its wiring.",
             })
 
         return {

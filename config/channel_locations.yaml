@@ -1,15 +1,17 @@
 # Location metadata per standard channel name.
 # Add to this when the YAML channel matching adds a new standard name.
+# display_name is what the report shows; the model refers to channels by
+# placeholder, so a display name may contain digits.
 channels:
-  tc_r1_l_foot: {unit: degC, height: foot, row: 1, side: left, sensor_range: [-40, 150]}
-  tc_r1_l_breath: {unit: degC, height: breath, row: 1, side: left, sensor_range: [-40, 150]}
-  tc_r1_l_head: {unit: degC, height: head, row: 1, side: left, sensor_range: [-40, 150]}
-  tc_r1_r_foot: {unit: degC, height: foot, row: 1, side: right, sensor_range: [-40, 150]}
-  tc_r1_r_breath: {unit: degC, height: breath, row: 1, side: right, sensor_range: [-40, 150]}
-  tc_r1_r_head: {unit: degC, height: head, row: 1, side: right, sensor_range: [-40, 150]}
-  tc_r2_l_foot: {unit: degC, height: foot, row: 2, side: left, sensor_range: [-40, 150]}
-  tc_r2_l_breath: {unit: degC, height: breath, row: 2, side: left, sensor_range: [-40, 150]}
-  tc_r2_l_head: {unit: degC, height: head, row: 2, side: left, sensor_range: [-40, 150]}
-  tc_r2_r_foot: {unit: degC, height: foot, row: 2, side: right, sensor_range: [-40, 150]}
-  tc_r2_r_breath: {unit: degC, height: breath, row: 2, side: right, sensor_range: [-40, 150]}
-  tc_r2_r_head: {unit: degC, height: head, row: 2, side: right, sensor_range: [-40, 150]}
+  tc_r1_l_foot: {display_name: Row 1 left foot, unit: degC, height: foot, row: 1, side: left, sensor_range: [-40, 150]}
+  tc_r1_l_breath: {display_name: Row 1 left breath height, unit: degC, height: breath, row: 1, side: left, sensor_range: [-40, 150]}
+  tc_r1_l_head: {display_name: Row 1 left head, unit: degC, height: head, row: 1, side: left, sensor_range: [-40, 150]}
+  tc_r1_r_foot: {display_name: Row 1 right foot, unit: degC, height: foot, row: 1, side: right, sensor_range: [-40, 150]}
+  tc_r1_r_breath: {display_name: Row 1 right breath height, unit: degC, height: breath, row: 1, side: right, sensor_range: [-40, 150]}
+  tc_r1_r_head: {display_name: Row 1 right head, unit: degC, height: head, row: 1, side: right, sensor_range: [-40, 150]}
+  tc_r2_l_foot: {display_name: Row 2 left foot, unit: degC, height: foot, row: 2, side: left, sensor_range: [-40, 150]}
+  tc_r2_l_breath: {display_name: Row 2 left breath height, unit: degC, height: breath, row: 2, side: left, sensor_range: [-40, 150]}
+  tc_r2_l_head: {display_name: Row 2 left head, unit: degC, height: head, row: 2, side: left, sensor_range: [-40, 150]}
+  tc_r2_r_foot: {display_name: Row 2 right foot, unit: degC, height: foot, row: 2, side: right, sensor_range: [-40, 150]}
+  tc_r2_r_breath: {display_name: Row 2 right breath height, unit: degC, height: breath, row: 2, side: right, sensor_range: [-40, 150]}
+  tc_r2_r_head: {display_name: Row 2 right head, unit: degC, height: head, row: 2, side: right, sensor_range: [-40, 150]}

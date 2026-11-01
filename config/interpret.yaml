@@ -12,6 +12,12 @@ tolerance:
   absolute: 0.1
 style_checks_fatal: false    # em dashes and value-unit spacing: warn (false) or fail (true)
 
+# Placeholder filling: decimals per unit ("none" = unitless, default = anything else).
+display_decimals: {degC: 1, min: 1, s: 0, kW: 1, none: 0, default: 2}
+# Extra tokens the model may write that contain digits (IDs, spec references).
+# The test ID, facility, spec reference, channel IDs and anomaly IDs are always allowed.
+digit_allowlist: []
+
 # Privacy guards on what is sent.
 forbidden_terms_file: config/forbidden_terms.local.yaml   # untracked; see the .example file
 max_payload_chars: 60000

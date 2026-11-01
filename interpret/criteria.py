@@ -62,7 +62,7 @@ def evaluate_criteria(metrics: list[Metric], spec: dict, auto_exclude: bool = Fa
         if m.value is None:
             note = "Metric could not be computed for this run"
 
-        out.append(Criterion(name=c["name"], metric=c["metric"], comparator=c["comparator"],
+        out.append(Criterion(id=c.get("id", c["metric"]), name=c["name"], metric=c["metric"], comparator=c["comparator"],
                              use_abs=bool(c.get("abs", False)), limit=c["limit"], unit=m.unit,
                              all_channels=full, excluding_suspect=excl, status=status,
                              basis=basis, note=note))

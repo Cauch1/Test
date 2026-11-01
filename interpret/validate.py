@@ -1,21 +1,22 @@
 """Checks on the model's commentary before anyone sees it.
 
-1. Numbers: every number in every text field must exist in the summary JSON,
-   within max(0.5 % of the value, 0.1 units), with the same unit, in a scope
-   the sentence names. Fatal. Scopes:
-   - global: metrics, criteria, phases, counts, and numbers inside text
-     (spec reference, dates). Always allowed.
-   - channel: one channel's min, max and phase means. Allowed only when the
-     sentence names that channel.
-   - anomaly: one anomaly's times and evidence. Allowed when the sentence
-     names the anomaly ID or its channel, and throughout that anomaly's own
-     explanation.
-   A unit on the last number of a list or range carries back to the earlier
-   ones ("between 29.72 and 180 min").
-2. Structure: every Python anomaly explained exactly once, no invented anomaly
-   IDs, one comment per criterion, 2 to 5 results paragraphs. Fatal.
-3. Style: em dashes and a missing space between value and unit. Logged as
-   warnings; fatal only when style_checks_fatal is true in config.
+The model writes templates: prose with placeholder keys such as
+{metric.time_to_target}, and no numeric values of its own. Order of checks:
+
+1. Placeholders (fatal): every key exists in the catalogue built from the
+   summary; no malformed braces; no digit left in the model's own text
+   except allowlisted IDs and spec references (test ID, facility, spec
+   reference, anomaly IDs, channel IDs, digit_allowlist in config).
+2. Structure (fatal): every Python anomaly explained exactly once, no
+   invented anomaly IDs, one comment per criterion ID, 2 to 5 paragraphs.
+3. Fill: Python replaces each key with the formatted value and unit.
+4. Final assertion (fatal): the unit-aware number check runs on the filled
+   text. Every number must match a summary value with the same unit, within
+   max(0.5 % of the value, 0.1 units). This guards the fill and formatting
+   code; with correct placeholders it cannot fail.
+5. Warnings (logged): channel or anomaly values quoted in a sentence that
+   does not name the channel or anomaly; spelled-out numbers; em dashes and
+   unit spacing (fatal only when style_checks_fatal is true).
 
 Numbers are compared by absolute value: "a gradient of 3.83 degC" correctly
 quotes a summary value of -3.83.
@@ -28,6 +29,8 @@ import re
 from dataclasses import asdict, dataclass
 
 from .commentary import Commentary
+from .placeholders import (DIGIT, NUMBER_WORDS, PLACEHOLDER, allowlist, build_catalogue,
+                           fill, strip_allowed)
 from .schema import Summary
 
 # A number not preceded by a letter, underscore, digit or point, so the "2" in
@@ -215,13 +218,18 @@ def _text_fields(c: Commentary, summary: Summary | None = None):
 
 
 def check_numbers(c: Commentary, summary: Summary, rel: float = 0.005,
-                  abs_tol: float = 0.1) -> list[Problem]:
+                  abs_tol: float = 0.1, scoped: bool = True,
+                  ignore: list[str] | None = None) -> list[Problem]:
+    """Unit-aware number check. scoped=False accepts channel and anomaly values
+    in any sentence (used on filled templates, where provenance is known).
+    ignore: allowlisted tokens (IDs, spec references) whose digits are not values."""
     known = known_values(summary)
+    every_scope = {k.scope for k in known}
     problems = []
     for field, text, base in _text_fields(c, summary):
         for sentence in _sentences(text):
-            scopes = scopes_for(sentence, summary, base)
-            for q in quoted_numbers(sentence):
+            scopes = scopes_for(sentence, summary, base) if scoped else every_scope
+            for q in quoted_numbers(strip_allowed(sentence, ignore or [])):
                 same_unit = [k for k in known if k.unit == q.unit]
                 in_scope = [k.value for k in same_unit if k.scope in scopes]
                 if matches(q.value, in_scope, rel, abs_tol):
@@ -265,7 +273,7 @@ def check_structure(c: Commentary, summary: Summary) -> list[Problem]:
                                 f"{aid} is not a Python-detected anomaly; new findings belong "
                                 "in model_suggested_anomalies"))
 
-    expected_crit = [cr.name for cr in summary.criteria]
+    expected_crit = [cr.id for cr in summary.criteria]
     got_crit = [cc.criterion for cc in c.criteria_commentary]
     for name in expected_crit:
         if got_crit.count(name) != 1:
@@ -287,14 +295,101 @@ def check_style(c: Commentary) -> list[Problem]:
     return problems
 
 
+def check_placeholders(c: Commentary, summary: Summary, cat: dict, tokens: list[str]) -> list[Problem]:
+    problems = []
+    owner_channel = {a.id: a.channel for a in summary.anomalies}
+    for field, text, base in _text_fields(c, summary):
+        for sentence in _sentences(text):
+            keys = PLACEHOLDER.findall(sentence)
+            for k in keys:
+                if k not in cat:
+                    problems.append(Problem("placeholder", field, f"unknown key {{{k}}}", sentence))
+            own = strip_allowed(sentence, tokens)
+            if "{" in own or "}" in own:
+                problems.append(Problem("placeholder", field, "malformed placeholder braces", sentence))
+            if DIGIT.search(own):
+                stray = " ".join(sorted(set(re.findall(r"\S*\d\S*", own))))
+                problems.append(Problem("digit", field, f"digits outside a placeholder: {stray}", sentence))
+            for w in NUMBER_WORDS.findall(own):
+                problems.append(Problem("number_word", field, f"spelled-out number '{w}'", sentence))
+
+            # Naming warning: a channel's or anomaly's value should sit in a
+            # sentence that names it, so the reader knows what it refers to.
+            named = set(base)
+            for k in keys:
+                parts = k.split(".")
+                if parts[0] == "channel" and parts[-1] == "name":
+                    named.add(f"channel:{parts[1]}")
+                if parts[0] == "anomaly" and parts[-1] == "channel":
+                    named |= {f"anomaly:{parts[1]}", f"channel:{owner_channel.get(parts[1])}"}
+            for ch in summary.channels:
+                if re.search(rf"(?<![\w.]){re.escape(ch.name)}(?![\w])", sentence):
+                    named.add(f"channel:{ch.name}")
+            for a in summary.anomalies:
+                if re.search(rf"\b{a.id}\b", PLACEHOLDER.sub(" ", sentence)):  # ID written in prose
+                    named.add(f"anomaly:{a.id}")
+                if f"channel:{a.channel}" in named:
+                    named.add(f"anomaly:{a.id}")
+            for k in keys:
+                e = cat.get(k)
+                if not e or not e.owner or k.endswith((".name", ".channel")):
+                    continue
+                kind = "anomaly" if k.startswith("anomaly.") else "channel"
+                if f"{kind}:{e.owner}" not in named:
+                    problems.append(Problem("naming", field,
+                                            f"{{{k}}} used without naming {e.owner} in the sentence", sentence))
+    return problems
+
+
+def fill_commentary(c: Commentary, summary: Summary, cat: dict) -> Commentary:
+    """Replace every key with its value; criterion IDs become criterion names."""
+    names = {cr.id: cr.name for cr in summary.criteria}
+    d = c.model_dump()
+    d["results_commentary"] = [fill(p, cat) for p in d["results_commentary"]]
+    for cc in d["criteria_commentary"]:
+        cc["criterion"] = names.get(cc["criterion"], cc["criterion"])
+        cc["comment"] = fill(cc["comment"], cat)
+    for a in d["anomaly_explanations"]:
+        for f in ("likely_cause", "evidence", "suggested_check"):
+            a[f] = fill(a[f], cat)
+    for m in d["model_suggested_anomalies"]:
+        for f in ("description", "reason"):
+            m[f] = fill(m[f], cat)
+    return Commentary.model_validate(d)
+
+
+FATAL = {"placeholder", "digit", "structure", "final_assertion"}
+
+
 def validate(c: Commentary, summary: Summary, *, rel: float = 0.005, abs_tol: float = 0.1,
-             style_fatal: bool = False) -> dict:
-    """Run every check. Returns the log dict; raises CommentaryValidationError
-    (after building the log) if any fatal check fails."""
-    problems = check_numbers(c, summary, rel, abs_tol) + check_structure(c, summary) + check_style(c)
-    fatal_kinds = {"number", "structure"} | ({"style"} if style_fatal else set())
+             style_fatal: bool = False, decimals: dict | None = None,
+             extra_allowlist: list[str] | None = None) -> tuple[dict, Commentary | None]:
+    """Run every check on a template commentary.
+
+    Returns (log, filled commentary). Raises CommentaryValidationError, with
+    the log attached, if any fatal check fails.
+    """
+    decimals = decimals or {"default": 2}
+    cat = build_catalogue(summary, decimals)
+    tokens = allowlist(summary, extra_allowlist or [])
+    problems = check_placeholders(c, summary, cat, tokens) + check_structure(c, summary)
+
+    filled = None
+    if not any(p.kind == "placeholder" for p in problems):  # filling needs every key to exist
+        filled = fill_commentary(c, summary, cat)
+        for p in check_numbers(filled, summary, rel, abs_tol, scoped=False, ignore=tokens):
+            p.kind = "final_assertion"
+            problems.append(p)
+        problems += check_style(filled)
+
+    fatal_kinds = FATAL | ({"style"} if style_fatal else set())
     fatal = [p for p in problems if p.kind in fatal_kinds]
-    log = {"passed": not fatal, "problems": [asdict(p) for p in problems],
+    counts = {k: sum(p.kind == k for p in problems)
+              for k in ("placeholder", "digit", "structure", "final_assertion", "naming",
+                        "number_word", "style")}
+    log = {"passed": not fatal, "counts": counts,
+           "placeholders_used": sum(len(PLACEHOLDER.findall(t)) for _, t, _ in _text_fields(c)),
+           "problems": [asdict(p) for p in problems],
            "tolerance": {"relative": rel, "absolute": abs_tol}}
     if fatal:
         lines = [f"[{p.kind}] {p.field}: {p.detail}" + (f'\n    Sentence: "{p.sentence}"' if p.sentence else "")
@@ -302,4 +397,4 @@ def validate(c: Commentary, summary: Summary, *, rel: float = 0.005, abs_tol: fl
         err = CommentaryValidationError(f"{len(fatal)} commentary check(s) failed:\n" + "\n".join(lines))
         err.log = log  # type: ignore[attr-defined]
         raise err
-    return log
+    return log, filled
