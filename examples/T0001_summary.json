@@ -344,7 +344,7 @@
       "start_min": 29.72,
       "end_min": 86.9,
       "evidence": {
-        "channel_std_degC": 0.8,
+        "channel_std_degC": 0.02,
         "neighbour_median_std_degC": 0.29,
         "value_degC": 29.05
       }

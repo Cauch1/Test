@@ -43,6 +43,7 @@ def test_flatline_found(faulty_df, channels, cfg):
     # Frozen value = clean curve at the freeze time: 21 + 22 * exp(-(30-10)/20)
     frozen = final_temp(FLAT_CH) + (43 - final_temp(FLAT_CH)) * 2.718281828 ** (-(FLAT_START_MIN - T0_MIN) / TAU_MIN)
     assert a.evidence["value_degC"] == pytest.approx(frozen, abs=0.05)
+    assert a.evidence["channel_std_degC"] < cfg["flatline"]["max_std_degC"]
 
 
 def test_flatline_clean(clean_noisy, channels, cfg):

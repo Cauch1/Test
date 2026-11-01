@@ -69,12 +69,14 @@ def detect_flatline(df, ch: ChannelInfo, channels, cfg, group_by) -> list[Anomal
         if _duration_s(t, i0, i1) >= cfg["min_duration_s"]:
             # A centred window only reads flat once it lies wholly in the flat
             # stretch, so widen the run by half a window at each end.
-            i0, i1 = max(0, i0 - w // 2), min(len(t), i1 + w // 2)
-            out.append(_make("flatline", ch.name, t, i0, i1, {
+            # Evidence comes from the core run, before widening.
+            evidence = {
                 "channel_std_degC": std.iloc[i0:i1].max(),
                 "neighbour_median_std_degC": nb_std.iloc[i0:i1].median(),
                 "value_degC": df[ch.name].iloc[i0:i1].median(),
-            }))
+            }
+            i0, i1 = max(0, i0 - w // 2), min(len(t), i1 + w // 2)
+            out.append(_make("flatline", ch.name, t, i0, i1, evidence))
     return out
 
 
