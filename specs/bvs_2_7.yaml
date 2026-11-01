@@ -1,0 +1,55 @@
+# PLACEHOLDER LIMITS. Replace every limit with the value in the issued spec
+# before using this file on a client programme.
+spec_ref: BVS 2.7
+
+# Channels averaged to form the cabin reference (drives phase detection).
+cabin_reference: {height: breath}
+
+# Metric types: time_to_threshold, window_mean, group_difference.
+# Selectors match channel metadata (height, row, side). row accepts first/last.
+metrics:
+  time_to_target:
+    type: time_to_threshold
+    channels: {height: breath}
+    threshold: 25.0
+    direction: below
+    from_phase: pull-down
+    smoothing_s: 60   # centred mean before the crossing test
+    unit: min
+  stabilised_cabin_mean:
+    type: window_mean
+    channels: {height: breath}
+    window: {phase: stabilised, last_min: 30}
+    unit: degC
+  front_rear_gradient:
+    type: group_difference
+    a: {height: breath, row: first}
+    b: {height: breath, row: last}
+    window: {phase: stabilised, last_min: 30}
+    unit: degC
+  foot_head_gradient:
+    type: group_difference
+    a: {height: head}
+    b: {height: foot}
+    window: {phase: stabilised, last_min: 30}
+    unit: degC
+
+criteria:
+  - name: Time to 25 degC at breath height
+    metric: time_to_target
+    comparator: "<="
+    limit: 60.0
+  - name: Stabilised cabin mean temperature
+    metric: stabilised_cabin_mean
+    comparator: "<="
+    limit: 24.0
+  - name: Front-to-rear gradient
+    metric: front_rear_gradient
+    comparator: "<="
+    limit: 2.0
+    abs: true
+  - name: Foot-to-head gradient
+    metric: foot_head_gradient
+    comparator: "<="
+    limit: 3.0
+    abs: true

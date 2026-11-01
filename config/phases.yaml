@@ -1,0 +1,8 @@
+# Phase inference from the cabin reference rate of change.
+# Applies to every spec; the cabin reference channels are set per spec.
+phase_detection:
+  smoothing_window_s: 300          # centred rolling mean before differentiating
+  transient_rate_degC_per_min: 0.05 # |rate| above this = pull-down or heat-up
+  min_phase_duration_s: 300        # shorter segments merge into a neighbour
+  departure_degC: 0.2              # transient starts where reference leaves the plateau by this much
+  departure_smoothing_s: 10        # light smoothing for the departure test (noise rejection)
