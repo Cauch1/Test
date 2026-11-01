@@ -1,0 +1,17 @@
+# Stage B settings.
+model: claude-sonnet-5-5
+max_tokens: 16000
+effort: high                 # low | medium | high | xhigh | max
+refusal_fallback: true       # server-side fallback if a safety classifier declines (Claude API only)
+prompt_file: prompts/system_interpretation.txt
+
+# Number validator: a number in the commentary matches a summary value v when
+# |number - v| <= max(relative * v, absolute).
+tolerance:
+  relative: 0.005
+  absolute: 0.1
+style_checks_fatal: false    # em dashes and value-unit spacing: warn (false) or fail (true)
+
+# Privacy guards on what is sent.
+forbidden_terms_file: config/forbidden_terms.local.yaml   # untracked; see the .example file
+max_payload_chars: 60000

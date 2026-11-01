@@ -1,0 +1,5 @@
+# Copy to forbidden_terms.local.yaml (gitignored) and list client and
+# programme names. Stage B refuses to send a summary containing any of them.
+terms:
+  - ExampleClient
+  - Example Programme

@@ -16,7 +16,8 @@ API, and every number in the commentary must trace to the summary JSON.
 
 ## Layout
 
-- `interpret/`: the package (schema, phases, metrics, criteria, anomalies, summary, adapter).
+- `interpret/`: the package. Stage A: schema, phases, metrics, criteria, anomalies, summary, adapter. Stage B: commentary, client, interpret, validate, deliverables, cli.
+- `prompts/`: the Stage B system prompt.
 - `config/`: phase detection, anomaly thresholds, channel location metadata.
 - `specs/`: one YAML per test specification (metrics and criteria).
 - `tests/`: pytest suite; `tests/synthetic.py` holds the closed-form fixture.
