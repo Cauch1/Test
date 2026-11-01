@@ -21,7 +21,7 @@ T0_MIN = 10.0        # soak ends, pull-down starts
 TAU_MIN = 20.0       # first-order time constant
 DURATION_MIN = 180.0
 FINAL = {"foot": 25.0, "breath": 22.0, "head": 21.0}
-ROW_OFFSET = 1.5     # row 2 settles 1.5 degC warmer than row 1
+ROW_OFFSET = 0.5     # row 2 settles 0.5 degC warmer; must stay below the drift threshold
 
 # Planted faults (used from step 3; switched off for the analytic Stage A tests)
 DRIFT_CH, DRIFT_START_MIN, DRIFT_DEGC = "tc_r2_r_foot", 90.0, 3.0
@@ -96,7 +96,7 @@ def expected(phase_cfg: dict, target: float = 25.0, last_min: float = 30.0) -> d
         "stabilised_start_min": stab_start,
         "time_to_target": t_target,
         "stabilised_cabin_mean": breath_final + amp * md,
-        # row 1 breath minus row 2 breath: (22 + 21e) - (23.5 + 19.5e)
+        # row 1 breath minus row 2 breath: -offset * (1 - e)
         "front_rear_gradient": -ROW_OFFSET + ROW_OFFSET * md,
         # head minus foot, same in each row: (21 + 22e) - (25 + 18e)
         "foot_head_gradient": (FINAL["head"] - FINAL["foot"]) * (1 - md),

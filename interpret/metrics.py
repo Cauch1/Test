@@ -101,12 +101,42 @@ METRIC_TYPES: dict[str, Callable] = {
 }
 
 
-def compute_metrics(df: pd.DataFrame, channels: list[ChannelInfo],
-                    phases: list[Phase], spec: dict) -> list[Metric]:
+def _used_channels(channels: list[ChannelInfo], p: dict) -> set[str]:
+    """Every channel any selector in this metric picks."""
+    used: set[str] = set()
+    for key in ("channels", "a", "b"):
+        if key in p:
+            used.update(select(channels, p[key]))
+    return used
+
+
+def compute_metrics(df: pd.DataFrame, channels: list[ChannelInfo], phases: list[Phase],
+                    spec: dict, excluded: dict | None = None) -> list[Metric]:
+    """excluded maps channel -> [(start_min, end_min)] spans to leave out (from anomalies)."""
+    excluded = excluded or {}
     out = []
     for name, p in spec["metrics"].items():
         if p["type"] not in METRIC_TYPES:
             raise ValueError(f"Unknown metric type '{p['type']}' for metric '{name}'")
-        value, win, method = METRIC_TYPES[p["type"]](df, channels, phases, p)
-        out.append(Metric(name=name, value=value, unit=p["unit"], method=method, window=win))
+        fn = METRIC_TYPES[p["type"]]
+        value, win, method = fn(df, channels, phases, p)
+
+        # Drop any used channel whose anomaly span overlaps this metric's window.
+        dropped: list[str] = []
+        if win is not None:
+            used = _used_channels(channels, p)
+            dropped = sorted(ch for ch, spans in excluded.items() if ch in used and any(
+                s <= win.end_min and e >= win.start_min for s, e in spans))
+        value_all = None
+        if dropped:
+            value_all = value
+            kept = [c for c in channels if c.name not in dropped]
+            try:
+                value, win, method = fn(df, kept, phases, p)
+            except ValueError:  # every channel in a group was excluded
+                value = None
+            method += f"; excluded {', '.join(dropped)} (anomaly overlaps window)"
+
+        out.append(Metric(name=name, value=value, unit=p["unit"], method=method, window=win,
+                          excluded_channels=dropped, value_all_channels=value_all))
     return out

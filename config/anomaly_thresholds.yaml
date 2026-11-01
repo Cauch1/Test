@@ -1,0 +1,32 @@
+# Python anomaly checks. All thresholds live here, none in code.
+
+# Neighbours = channels sharing these metadata attributes. [height] compares a
+# channel with every channel at the same height across rows and sides. Needs
+# at least 3 channels per group; with 2 you cannot tell which one is wrong.
+neighbour_group_by: [height]
+
+flatline:
+  window_s: 600                 # rolling window for standard deviation
+  max_std_degC: 0.02            # channel std below this = not moving
+  neighbour_min_std_degC: 0.1   # neighbours' median std above this = they are moving
+  min_duration_s: 600
+
+drift:
+  smoothing_s: 120              # rolling mean on the deviation, rejects noise and spikes
+  threshold_degC: 1.5           # |channel - median of other neighbours|; must exceed normal row spread
+  min_duration_s: 900
+
+spike:
+  baseline_window_s: 600        # centred rolling median; must be much longer than a spike
+  threshold_degC: 2.0           # |channel - baseline|
+  max_duration_s: 300           # longer excursions are steps or drift, not spikes
+  recovery_window_s: 60         # fit the trend this long before; after must match it...
+  recovery_tolerance_degC: 1.0  # ...within this, or it is a step, not a spike
+
+missing:
+  max_gap_factor: 1.5           # time step > factor x median step = gap in logging
+  min_nan_run_samples: 1
+
+# Stage A: leave these anomaly types out of metrics whose window they overlap.
+# Set to [] to flag only and never change a metric.
+exclude_from_metrics: [flatline, drift]

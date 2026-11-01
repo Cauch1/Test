@@ -73,6 +73,10 @@ class Metric(_Strict):
     unit: str
     method: str
     window: Optional[TimeWindow]
+    excluded_channels: list[str] = Field(
+        default_factory=list, description="Left out because a flatline or drift overlaps the window")
+    value_all_channels: Optional[float] = Field(
+        default=None, description="Value with every channel included; set only when channels were excluded")
 
 
 class Criterion(_Strict):

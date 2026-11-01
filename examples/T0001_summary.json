@@ -16,12 +16,12 @@
         "id": "pull-down",
         "name": "pull-down",
         "start_min": 10.2,
-        "end_min": 70.0
+        "end_min": 70.55
       },
       {
         "id": "stabilised",
         "name": "stabilised",
-        "start_min": 70.0,
+        "start_min": 70.55,
         "end_min": 180.0
       }
     ]
@@ -41,7 +41,7 @@
       "max": 43.16,
       "phase_means": {
         "soak": 43.0,
-        "pull-down": 30.66,
+        "pull-down": 30.62,
         "stabilised": 25.16
       },
       "quality": {
@@ -57,8 +57,8 @@
       "max": 43.14,
       "phase_means": {
         "soak": 43.0,
-        "pull-down": 28.61,
-        "stabilised": 22.19
+        "pull-down": 28.56,
+        "stabilised": 22.18
       },
       "quality": {
         "nan_fraction": 0.0,
@@ -73,8 +73,8 @@
       "max": 43.15,
       "phase_means": {
         "soak": 43.0,
-        "pull-down": 27.92,
-        "stabilised": 21.2
+        "pull-down": 27.87,
+        "stabilised": 21.19
       },
       "quality": {
         "nan_fraction": 0.0,
@@ -89,7 +89,7 @@
       "max": 43.15,
       "phase_means": {
         "soak": 42.99,
-        "pull-down": 30.66,
+        "pull-down": 30.62,
         "stabilised": 25.16
       },
       "quality": {
@@ -105,8 +105,8 @@
       "max": 43.16,
       "phase_means": {
         "soak": 43.0,
-        "pull-down": 28.61,
-        "stabilised": 22.19
+        "pull-down": 28.55,
+        "stabilised": 22.18
       },
       "quality": {
         "nan_fraction": 0.0,
@@ -121,24 +121,27 @@
       "max": 43.15,
       "phase_means": {
         "soak": 43.0,
-        "pull-down": 30.96,
+        "pull-down": 30.95,
         "stabilised": 29.05
       },
       "quality": {
         "nan_fraction": 0.0,
-        "flags": []
+        "flags": [
+          "drift",
+          "flatline"
+        ]
       }
     },
     {
       "name": "tc_r2_l_foot",
       "unit": "degC",
       "location_group": "foot height, row 2",
-      "min": 26.31,
+      "min": 25.31,
       "max": 43.17,
       "phase_means": {
         "soak": 43.0,
-        "pull-down": 31.69,
-        "stabilised": 26.65
+        "pull-down": 30.96,
+        "stabilised": 25.66
       },
       "quality": {
         "nan_fraction": 0.0,
@@ -149,28 +152,30 @@
       "name": "tc_r2_l_breath",
       "unit": "degC",
       "location_group": "breath height, row 2",
-      "min": 23.35,
+      "min": 22.35,
       "max": 43.14,
       "phase_means": {
         "soak": 43.0,
-        "pull-down": 29.63,
-        "stabilised": 23.73
+        "pull-down": 28.9,
+        "stabilised": 22.74
       },
       "quality": {
         "nan_fraction": 0.0,
-        "flags": []
+        "flags": [
+          "spike"
+        ]
       }
     },
     {
       "name": "tc_r2_l_head",
       "unit": "degC",
       "location_group": "head height, row 2",
-      "min": 22.35,
+      "min": 21.36,
       "max": 43.13,
       "phase_means": {
         "soak": 43.0,
-        "pull-down": 28.95,
-        "stabilised": 22.68
+        "pull-down": 28.21,
+        "stabilised": 21.69
       },
       "quality": {
         "nan_fraction": 0.0,
@@ -181,28 +186,30 @@
       "name": "tc_r2_r_foot",
       "unit": "degC",
       "location_group": "foot height, row 2",
-      "min": 26.65,
+      "min": 25.66,
       "max": 43.14,
       "phase_means": {
         "soak": 43.0,
-        "pull-down": 31.69,
-        "stabilised": 27.88
+        "pull-down": 30.96,
+        "stabilised": 26.89
       },
       "quality": {
         "nan_fraction": 0.0,
-        "flags": []
+        "flags": [
+          "drift"
+        ]
       }
     },
     {
       "name": "tc_r2_r_breath",
       "unit": "degC",
       "location_group": "breath height, row 2",
-      "min": 23.36,
+      "min": 22.36,
       "max": 43.15,
       "phase_means": {
         "soak": 43.0,
-        "pull-down": 29.63,
-        "stabilised": 23.68
+        "pull-down": 28.9,
+        "stabilised": 22.68
       },
       "quality": {
         "nan_fraction": 0.0,
@@ -213,12 +220,12 @@
       "name": "tc_r2_r_head",
       "unit": "degC",
       "location_group": "head height, row 2",
-      "min": 22.34,
+      "min": 21.34,
       "max": 43.13,
       "phase_means": {
         "soak": 43.0,
-        "pull-down": 28.95,
-        "stabilised": 22.68
+        "pull-down": 28.21,
+        "stabilised": 21.69
       },
       "quality": {
         "nan_fraction": 0.0,
@@ -229,43 +236,54 @@
   "metrics": [
     {
       "name": "time_to_target",
-      "value": 43.74,
+      "value": 40.25,
       "unit": "min",
       "method": "Minutes from pull-down start until mean of {'height': 'breath'} first goes below 25.0 (60 s centred mean, linear interpolation)",
       "window": {
         "start_min": 10.2,
-        "end_min": 53.94
-      }
+        "end_min": 50.45
+      },
+      "excluded_channels": [],
+      "value_all_channels": null
     },
     {
       "name": "stabilised_cabin_mean",
-      "value": 22.76,
+      "value": 22.26,
       "unit": "degC",
       "method": "Mean of {'height': 'breath'} over {'phase': 'stabilised', 'last_min': 30}",
       "window": {
         "start_min": 150.0,
         "end_min": 180.0
-      }
+      },
+      "excluded_channels": [],
+      "value_all_channels": null
     },
     {
       "name": "front_rear_gradient",
-      "value": -1.5,
+      "value": -0.5,
       "unit": "degC",
       "method": "Mean of {'height': 'breath', 'row': 'first'} minus mean of {'height': 'breath', 'row': 'last'} over {'phase': 'stabilised', 'last_min': 30}",
       "window": {
         "start_min": 150.0,
         "end_min": 180.0
-      }
+      },
+      "excluded_channels": [],
+      "value_all_channels": null
     },
     {
       "name": "foot_head_gradient",
-      "value": -2.61,
+      "value": -3.83,
       "unit": "degC",
-      "method": "Mean of {'height': 'head'} minus mean of {'height': 'foot'} over {'phase': 'stabilised', 'last_min': 30}",
+      "method": "Mean of {'height': 'head'} minus mean of {'height': 'foot'} over {'phase': 'stabilised', 'last_min': 30}; excluded tc_r1_r_head, tc_r2_r_foot (anomaly overlaps window)",
       "window": {
         "start_min": 150.0,
         "end_min": 180.0
-      }
+      },
+      "excluded_channels": [
+        "tc_r1_r_head",
+        "tc_r2_r_foot"
+      ],
+      "value_all_channels": -2.61
     }
   ],
   "criteria": [
@@ -276,8 +294,8 @@
       "use_abs": false,
       "limit": 60.0,
       "unit": "min",
-      "measured": 43.74,
-      "margin": 16.26,
+      "measured": 40.25,
+      "margin": 19.75,
       "status": "PASS",
       "note": null
     },
@@ -288,8 +306,8 @@
       "use_abs": false,
       "limit": 24.0,
       "unit": "degC",
-      "measured": 22.76,
-      "margin": 1.24,
+      "measured": 22.26,
+      "margin": 1.74,
       "status": "PASS",
       "note": null
     },
@@ -300,8 +318,8 @@
       "use_abs": true,
       "limit": 2.0,
       "unit": "degC",
-      "measured": 1.5,
-      "margin": 0.5,
+      "measured": 0.5,
+      "margin": 1.5,
       "status": "PASS",
       "note": null
     },
@@ -312,11 +330,60 @@
       "use_abs": true,
       "limit": 3.0,
       "unit": "degC",
-      "measured": 2.61,
-      "margin": 0.39,
-      "status": "PASS",
+      "measured": 3.83,
+      "margin": -0.83,
+      "status": "FAIL",
       "note": null
     }
   ],
-  "anomalies": []
+  "anomalies": [
+    {
+      "id": "A01",
+      "channel": "tc_r1_r_head",
+      "type": "flatline",
+      "start_min": 29.72,
+      "end_min": 86.9,
+      "evidence": {
+        "channel_std_degC": 0.8,
+        "neighbour_median_std_degC": 0.29,
+        "value_degC": 29.05
+      }
+    },
+    {
+      "id": "A02",
+      "channel": "tc_r1_r_head",
+      "type": "drift",
+      "start_min": 35.28,
+      "end_min": 180.0,
+      "evidence": {
+        "max_abs_deviation_degC": 7.57,
+        "mean_deviation_degC": 6.74,
+        "threshold_degC": 1.5
+      }
+    },
+    {
+      "id": "A03",
+      "channel": "tc_r2_l_breath",
+      "type": "spike",
+      "start_min": 120.0,
+      "end_min": 120.98,
+      "evidence": {
+        "peak_excursion_degC": 6.17,
+        "baseline_degC": 22.59,
+        "duration_s": 60.0
+      }
+    },
+    {
+      "id": "A04",
+      "channel": "tc_r2_r_foot",
+      "type": "drift",
+      "start_min": 120.82,
+      "end_min": 180.0,
+      "evidence": {
+        "max_abs_deviation_degC": 3.47,
+        "mean_deviation_degC": 2.49,
+        "threshold_degC": 1.5
+      }
+    }
+  ]
 }

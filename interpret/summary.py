@@ -10,6 +10,7 @@ import pandas as pd
 import yaml
 from pydantic import BaseModel
 
+from .anomalies import detect_anomalies, exclusions
 from .channels import ChannelInfo, select
 from .criteria import evaluate_criteria
 from .metrics import compute_metrics, group_mean
@@ -51,7 +52,8 @@ def _round_model(model):
 
 
 def build_summary(df: pd.DataFrame, channels: list[ChannelInfo], *, test_id: str,
-                  facility: str, run_date: date, spec: dict, phase_cfg: dict) -> Summary:
+                  facility: str, run_date: date, spec: dict, phase_cfg: dict,
+                  anomaly_cfg: dict | None = None) -> Summary:
     """Compute everything the commentary may quote. df needs 'time_s' plus one
     column per ChannelInfo.name."""
     missing = [c.name for c in channels if c.name not in df.columns]
@@ -60,7 +62,9 @@ def build_summary(df: pd.DataFrame, channels: list[ChannelInfo], *, test_id: str
 
     ref = group_mean(df, select(channels, spec["cabin_reference"]))
     phases = detect_phases(df["time_s"], ref, phase_cfg)
-    metrics = compute_metrics(df, channels, phases, spec)
+    anomalies = detect_anomalies(df, channels, anomaly_cfg) if anomaly_cfg else []
+    excluded = exclusions(anomalies, anomaly_cfg.get("exclude_from_metrics", [])) if anomaly_cfg else {}
+    metrics = compute_metrics(df, channels, phases, spec, excluded)
     criteria = evaluate_criteria(metrics, spec)
 
     t = df["time_s"].to_numpy()
@@ -73,7 +77,10 @@ def build_summary(df: pd.DataFrame, channels: list[ChannelInfo], *, test_id: str
         channels=[_channel_summary(df, c, phases) for c in channels],
         metrics=metrics,
         criteria=criteria,
+        anomalies=anomalies,
     )
+    for ch in summary.channels:
+        ch.quality.flags = sorted({a.type for a in anomalies if a.channel in (ch.name, "all")})
     for group in (summary.test.phases, summary.metrics, summary.criteria):
         for item in group:
             _round_model(item)

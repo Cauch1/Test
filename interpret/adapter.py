@@ -22,11 +22,13 @@ ROOT = Path(__file__).resolve().parent.parent
 def run_stage_a(df: pd.DataFrame, *, test_id: str, facility: str, run_date: date,
                 spec_path: str | Path, out_dir: str | Path,
                 channels_path: str | Path = ROOT / "config" / "channel_locations.yaml",
-                phases_path: str | Path = ROOT / "config" / "phases.yaml"):
+                phases_path: str | Path = ROOT / "config" / "phases.yaml",
+                anomalies_path: str | Path = ROOT / "config" / "anomaly_thresholds.yaml"):
     """Build and write the summary JSON. Returns (summary, path)."""
     channels = load_channel_info(channels_path)
     summary = build_summary(
         df, channels, test_id=test_id, facility=facility, run_date=run_date,
         spec=load_yaml(spec_path), phase_cfg=load_yaml(phases_path)["phase_detection"],
+        anomaly_cfg=load_yaml(anomalies_path),
     )
     return summary, write_summary(summary, out_dir)
