@@ -22,11 +22,32 @@ def group_mean(df: pd.DataFrame, names: list[str]) -> pd.Series:
     return df[names].mean(axis=1, skipna=True)
 
 
+def stratified_mean(df: pd.DataFrame, names: list[str], channels: list[ChannelInfo],
+                    by: list[str] | None) -> pd.Series:
+    """Mean within each stratum (for example each row), then mean across strata.
+
+    With a 3 degC front-to-rear gradient, a plain mean shifts by about 0.5 degC
+    when one front sensor is excluded, because the rear row then has more
+    weight. Averaging per row first keeps each row's weight fixed.
+    """
+    if not by:
+        return group_mean(df, names)
+    info = {c.name: c for c in channels}
+    strata: dict[tuple, list[str]] = {}
+    for n in names:
+        strata.setdefault(tuple(getattr(info[n], k) for k in by), []).append(n)
+    return pd.concat([group_mean(df, ns) for ns in strata.values()], axis=1).mean(axis=1)
+
+
 def resolve_window(phases: list[Phase], window: dict) -> Optional[TimeWindow]:
-    """Turn {phase: stabilised, last_min: 30} into absolute start/end minutes.
+    """Turn a window spec into absolute start/end minutes. Two forms:
+    {phase: stabilised, last_min: 30} (or first_min), relative to a detected phase;
+    {start_min: 60, end_min: 70}, absolute minutes from the start of the record.
 
     Returns None when the phase does not exist in this run.
     """
+    if "phase" not in window:
+        return TimeWindow(start_min=window["start_min"], end_min=window["end_min"])
     match = [p for p in phases if p.id == window["phase"]]
     if not match:
         return None
@@ -58,7 +79,8 @@ def time_to_threshold(df, channels, phases, p) -> tuple[Optional[float], Optiona
     # past the threshold is reached early (first-passage bias).
     dt_s = float(np.median(np.diff(df["time_s"])))
     win = max(1, int(round(p.get("smoothing_s", 60) / dt_s)))
-    y = group_mean(df, names).rolling(win, center=True, min_periods=1).mean().to_numpy()
+    y = stratified_mean(df, names, channels, p.get("stratify_by"))
+    y = y.rolling(win, center=True, min_periods=1).mean().to_numpy()
     after = t >= phase.start_min
     crossed = (y <= p["threshold"]) if p["direction"] == "below" else (y >= p["threshold"])
     idx = np.flatnonzero(after & crossed)
@@ -74,24 +96,44 @@ def time_to_threshold(df, channels, phases, p) -> tuple[Optional[float], Optiona
 
 
 def window_mean(df, channels, phases, p):
-    """Time-mean of the group mean over a window."""
+    """Time-mean of the (optionally stratified) group mean over a window."""
     names = select(channels, p["channels"])
     win = resolve_window(phases, p["window"])
-    method = f"Mean of {p['channels']} over {p['window']}"
+    by = p.get("stratify_by")
+    method = f"Mean of {p['channels']} over {p['window']}" + (f", averaged per {by} first" if by else "")
     if win is None:
         return None, None, method
-    return float(group_mean(df, names)[_mask(df, win)].mean()), win, method
+    return float(stratified_mean(df, names, channels, by)[_mask(df, win)].mean()), win, method
 
 
 def group_difference(df, channels, phases, p):
-    """Mean of group a minus mean of group b over a window."""
+    """Group a minus group b over a window.
+
+    With pair_by (for example [row, side]) each a channel is matched with the b
+    channel at the same location and the result is the mean of the pairwise
+    differences. Without pairing, dropping one channel from an unbalanced layout
+    shifts a group mean by the row-to-row offset; pairing removes the matching
+    partner too, so the gradient stays unbiased.
+    """
     a, b = select(channels, p["a"]), select(channels, p["b"])
     win = resolve_window(phases, p["window"])
-    method = f"Mean of {p['a']} minus mean of {p['b']} over {p['window']}"
+    pair_by = p.get("pair_by")
+    how = f"paired by {pair_by}, mean of differences" if pair_by else "difference of group means"
+    method = f"{p['a']} minus {p['b']} over {p['window']}, {how}"
     if win is None:
         return None, None, method
     m = _mask(df, win)
-    return float(group_mean(df, a)[m].mean() - group_mean(df, b)[m].mean()), win, method
+    if not pair_by:
+        return float(group_mean(df, a)[m].mean() - group_mean(df, b)[m].mean()), win, method
+
+    info = {c.name: c for c in channels}
+    key = lambda n: tuple(getattr(info[n], k) for k in pair_by)
+    b_by_key = {key(n): n for n in b}
+    pairs = [(n, b_by_key[key(n)]) for n in a if key(n) in b_by_key]
+    if not pairs:
+        raise ValueError(f"No {pair_by} pairs between {p['a']} and {p['b']}")
+    diffs = [df[x][m].mean() - df[y][m].mean() for x, y in pairs]
+    return float(np.mean(diffs)), win, method
 
 
 METRIC_TYPES: dict[str, Callable] = {
@@ -111,9 +153,14 @@ def _used_channels(channels: list[ChannelInfo], p: dict) -> set[str]:
 
 
 def compute_metrics(df: pd.DataFrame, channels: list[ChannelInfo], phases: list[Phase],
-                    spec: dict, excluded: dict | None = None) -> list[Metric]:
-    """excluded maps channel -> [(start_min, end_min)] spans to leave out (from anomalies)."""
-    excluded = excluded or {}
+                    spec: dict, suspect: dict | None = None) -> list[Metric]:
+    """suspect maps channel -> [(start_min, end_min)] anomaly spans.
+
+    value is always the all-channel result. When a used channel's anomaly span
+    overlaps the metric window, value_excluding_suspect is computed as well;
+    the criteria step decides what to do with the two.
+    """
+    suspect = suspect or {}
     out = []
     for name, p in spec["metrics"].items():
         if p["type"] not in METRIC_TYPES:
@@ -121,22 +168,19 @@ def compute_metrics(df: pd.DataFrame, channels: list[ChannelInfo], phases: list[
         fn = METRIC_TYPES[p["type"]]
         value, win, method = fn(df, channels, phases, p)
 
-        # Drop any used channel whose anomaly span overlaps this metric's window.
-        dropped: list[str] = []
+        flagged: list[str] = []
         if win is not None:
             used = _used_channels(channels, p)
-            dropped = sorted(ch for ch, spans in excluded.items() if ch in used and any(
+            flagged = sorted(ch for ch, spans in suspect.items() if ch in used and any(
                 s <= win.end_min and e >= win.start_min for s, e in spans))
-        value_all = None
-        if dropped:
-            value_all = value
-            kept = [c for c in channels if c.name not in dropped]
+        value_excl = None
+        if flagged:
+            kept = [c for c in channels if c.name not in flagged]
             try:
-                value, win, method = fn(df, kept, phases, p)
-            except ValueError:  # every channel in a group was excluded
-                value = None
-            method += f"; excluded {', '.join(dropped)} (anomaly overlaps window)"
+                value_excl, _, _ = fn(df, kept, phases, p)
+            except ValueError:  # every channel in a group was suspect
+                value_excl = None
 
         out.append(Metric(name=name, value=value, unit=p["unit"], method=method, window=win,
-                          excluded_channels=dropped, value_all_channels=value_all))
+                          suspect_channels=flagged, value_excluding_suspect=value_excl))
     return out

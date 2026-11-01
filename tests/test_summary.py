@@ -55,15 +55,16 @@ def test_metrics_match_closed_form(summary, exp, name, tol):
 
 def test_criteria_status_and_margin(summary, spec):
     by_name = {c.metric: c for c in summary.criteria}
-    # Placeholder limits: 60 min, 24 degC, |2| degC, |3| degC
-    assert by_name["time_to_target"].status == "PASS"
-    assert by_name["stabilised_cabin_mean"].status == "PASS"
-    assert by_name["front_rear_gradient"].status == "PASS"
+    # Placeholder limits: 60 min, 24 degC, |2| degC, |3| degC.
+    # Bus-like 3 degC row offset fails the 2 degC front-to-rear limit.
+    expected = {"time_to_target": "PASS", "stabilised_cabin_mean": "PASS",
+                "front_rear_gradient": "FAIL", "foot_head_gradient": "FAIL"}
+    assert {k: v.status for k, v in by_name.items()} == expected
     fh = by_name["foot_head_gradient"]
-    assert fh.status == "FAIL"
-    assert fh.measured == pytest.approx(abs(_metric(summary, "foot_head_gradient").value), abs=0.01)
-    assert fh.margin == pytest.approx(3.0 - fh.measured, abs=0.01)
-    assert fh.margin < 0
+    assert fh.excluding_suspect is None and fh.basis == "all_channels"
+    assert fh.all_channels.measured == pytest.approx(abs(_metric(summary, "foot_head_gradient").value), abs=0.01)
+    assert fh.all_channels.margin == pytest.approx(3.0 - fh.all_channels.measured, abs=0.01)
+    assert fh.all_channels.margin < 0
 
 
 def test_channel_stats(summary):

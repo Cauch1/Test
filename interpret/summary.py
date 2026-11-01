@@ -10,7 +10,7 @@ import pandas as pd
 import yaml
 from pydantic import BaseModel
 
-from .anomalies import detect_anomalies, exclusions
+from .anomalies import detect_anomalies, suspect_spans
 from .channels import ChannelInfo, select
 from .criteria import evaluate_criteria
 from .metrics import compute_metrics, group_mean
@@ -62,10 +62,13 @@ def build_summary(df: pd.DataFrame, channels: list[ChannelInfo], *, test_id: str
 
     ref = group_mean(df, select(channels, spec["cabin_reference"]))
     phases = detect_phases(df["time_s"], ref, phase_cfg)
-    anomalies = detect_anomalies(df, channels, anomaly_cfg) if anomaly_cfg else []
-    excluded = exclusions(anomalies, anomaly_cfg.get("exclude_from_metrics", [])) if anomaly_cfg else {}
-    metrics = compute_metrics(df, channels, phases, spec, excluded)
-    criteria = evaluate_criteria(metrics, spec)
+    anomalies, notes, suspect, auto = [], [], {}, False
+    if anomaly_cfg:
+        anomalies, notes = detect_anomalies(df, channels, anomaly_cfg, phases)
+        suspect = suspect_spans(anomalies, anomaly_cfg.get("suspect_types", []))
+        auto = bool(anomaly_cfg.get("auto_exclude", False))
+    metrics = compute_metrics(df, channels, phases, spec, suspect)
+    criteria = evaluate_criteria(metrics, spec, auto_exclude=auto)
 
     t = df["time_s"].to_numpy()
     summary = Summary(
@@ -78,6 +81,7 @@ def build_summary(df: pd.DataFrame, channels: list[ChannelInfo], *, test_id: str
         metrics=metrics,
         criteria=criteria,
         anomalies=anomalies,
+        notes=notes,
     )
     for ch in summary.channels:
         ch.quality.flags = sorted({a.type for a in anomalies if a.channel in (ch.name, "all")})

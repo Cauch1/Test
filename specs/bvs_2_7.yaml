@@ -6,6 +6,7 @@ spec_ref: BVS 2.7
 cabin_reference: {height: breath}
 
 # Metric types: time_to_threshold, window_mean, group_difference.
+# Windows: {phase: <id>, first_min|last_min: N} or {start_min: A, end_min: B}.
 # Selectors match channel metadata (height, row, side). row accepts first/last.
 metrics:
   time_to_target:
@@ -14,23 +15,27 @@ metrics:
     threshold: 25.0
     direction: below
     from_phase: pull-down
+    stratify_by: [row]   # mean per row first, so losing one sensor does not reweight rows
     smoothing_s: 60   # centred mean before the crossing test
     unit: min
   stabilised_cabin_mean:
     type: window_mean
     channels: {height: breath}
+    stratify_by: [row]
     window: {phase: stabilised, last_min: 30}
     unit: degC
   front_rear_gradient:
     type: group_difference
     a: {height: breath, row: first}
     b: {height: breath, row: last}
+    pair_by: [side]       # front-left vs rear-left, front-right vs rear-right
     window: {phase: stabilised, last_min: 30}
     unit: degC
   foot_head_gradient:
     type: group_difference
     a: {height: head}
     b: {height: foot}
+    pair_by: [row, side]  # head vs foot at the same seat position
     window: {phase: stabilised, last_min: 30}
     unit: degC
 

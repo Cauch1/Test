@@ -21,7 +21,7 @@ T0_MIN = 10.0        # soak ends, pull-down starts
 TAU_MIN = 20.0       # first-order time constant
 DURATION_MIN = 180.0
 FINAL = {"foot": 25.0, "breath": 22.0, "head": 21.0}
-ROW_OFFSET = 0.5     # row 2 settles 0.5 degC warmer; must stay below the drift threshold
+ROW_OFFSET = 3.0     # row 2 settles 3.0 degC warmer: a bus-like front-to-rear gradient
 
 # Planted faults (used from step 3; switched off for the analytic Stage A tests)
 DRIFT_CH, DRIFT_START_MIN, DRIFT_DEGC = "tc_r2_r_foot", 90.0, 3.0

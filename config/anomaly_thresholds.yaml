@@ -9,12 +9,18 @@ flatline:
   window_s: 600                 # rolling window for standard deviation
   max_std_degC: 0.02            # channel std below this = not moving
   neighbour_min_std_degC: 0.1   # neighbours' median std above this = they are moving
+  frozen_max_std_degC: 0.005    # channel std below this = no sensor noise at all...
+  neighbour_noise_floor_degC: 0.02  # ...while neighbours' median std shows noise above this
   min_duration_s: 600
 
 drift:
-  smoothing_s: 120              # rolling mean on the deviation, rejects noise and spikes
-  threshold_degC: 1.5           # |channel - median of other neighbours|; must exceed normal row spread
-  min_duration_s: 900
+  # Offset = channel minus median of the other neighbours. Its median over the
+  # reference window is the baseline; drift = change from that baseline.
+  # Either {phase: stabilised, first_min: 10} or absolute {start_min: 60, end_min: 70}.
+  reference_window: {phase: stabilised, first_min: 10}
+  smoothing_s: 120              # rolling mean on the offset, rejects noise and spikes
+  threshold_degC: 1.5           # |offset change| above this...
+  min_duration_s: 900           # ...for at least this long
 
 spike:
   baseline_window_s: 600        # centred rolling median; must be much longer than a spike
@@ -27,6 +33,10 @@ missing:
   max_gap_factor: 1.5           # time step > factor x median step = gap in logging
   min_nan_run_samples: 1
 
-# Stage A: leave these anomaly types out of metrics whose window they overlap.
-# Set to [] to flag only and never change a metric.
-exclude_from_metrics: [flatline, drift]
+# Stage A: channels with these anomaly types overlapping a metric window are
+# "suspect". Every affected metric is computed with and without them.
+suspect_types: [flatline, drift]
+# false (default): flag only. Criteria use all channels; if the two verdicts
+#   differ the status is REVIEW_REQUIRED.
+# true: criteria use the value with suspect channels excluded.
+auto_exclude: false

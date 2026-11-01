@@ -14,7 +14,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 Facility = Literal["CWT1", "CWT2", "VTEOS", "VCC"]
 PhaseName = Literal["soak", "pull-down", "stabilised", "heat-up"]
-Status = Literal["PASS", "FAIL"]
+Verdict = Literal["PASS", "FAIL"]
+Status = Literal["PASS", "FAIL", "REVIEW_REQUIRED"]
 
 
 class _Strict(BaseModel):
@@ -73,10 +74,19 @@ class Metric(_Strict):
     unit: str
     method: str
     window: Optional[TimeWindow]
-    excluded_channels: list[str] = Field(
-        default_factory=list, description="Left out because a flatline or drift overlaps the window")
-    value_all_channels: Optional[float] = Field(
-        default=None, description="Value with every channel included; set only when channels were excluded")
+    suspect_channels: list[str] = Field(
+        default_factory=list,
+        description="Used channels with a flatline or drift overlapping the window")
+    value_excluding_suspect: Optional[float] = Field(
+        default=None, description="Value with suspect channels left out; None when there are none")
+
+
+class Check(_Strict):
+    """One evaluation of a criterion against one version of the metric."""
+
+    measured: Optional[float]
+    margin: Optional[float] = Field(description="Positive means inside the limit")
+    verdict: Verdict
 
 
 class Criterion(_Strict):
@@ -86,9 +96,11 @@ class Criterion(_Strict):
     use_abs: bool
     limit: float
     unit: str
-    measured: Optional[float]
-    margin: Optional[float] = Field(description="Positive means inside the limit")
-    status: Status
+    all_channels: Check
+    excluding_suspect: Optional[Check] = Field(
+        default=None, description="Present only when the metric has suspect channels")
+    status: Status = Field(description="REVIEW_REQUIRED when the two checks disagree (flag-only mode)")
+    basis: Literal["all_channels", "excluding_suspect"]
     note: Optional[str] = None
 
 
@@ -109,3 +121,4 @@ class Summary(_Strict):
     metrics: list[Metric]
     criteria: list[Criterion]
     anomalies: list[Anomaly] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list, description="Checks skipped and why")

@@ -12,7 +12,8 @@ import numpy as np
 import pandas as pd
 
 from .channels import ChannelInfo
-from .schema import Anomaly
+from .metrics import resolve_window
+from .schema import Anomaly, Phase
 
 
 # ---------- helpers ----------
@@ -53,8 +54,13 @@ def _make(kind: str, ch: str, t: np.ndarray, i0: int, i1: int, evidence: dict) -
 
 # ---------- checks ----------
 
-def detect_flatline(df, ch: ChannelInfo, channels, cfg, group_by) -> list[Anomaly]:
-    """Rolling std below threshold while neighbours are changing."""
+def detect_flatline(df, ch: ChannelInfo, channels, cfg, group_by, phases=None) -> list[Anomaly]:
+    """A channel that has stopped moving when its neighbours have not. Two conditions:
+    1. Neighbours are changing (a transient) and the channel std is below max_std.
+    2. Neighbours show ordinary sensor noise and the channel shows none at all
+       (std below frozen_max_std). This catches a sensor frozen at a plausible
+       value during a stable phase, which condition 1 and the drift check miss.
+    """
     others = neighbours(ch, channels, group_by)
     if not others:
         return []
@@ -62,7 +68,9 @@ def detect_flatline(df, ch: ChannelInfo, channels, cfg, group_by) -> list[Anomal
     w = _samples(cfg["window_s"], dt)
     std = df[ch.name].rolling(w, center=True, min_periods=w // 2).std()
     nb_std = df[others].rolling(w, center=True, min_periods=w // 2).std().median(axis=1)
-    mask = (std < cfg["max_std_degC"]) & (nb_std > cfg["neighbour_min_std_degC"])
+    moving = (std < cfg["max_std_degC"]) & (nb_std > cfg["neighbour_min_std_degC"])
+    frozen = (std < cfg["frozen_max_std_degC"]) & (nb_std > cfg["neighbour_noise_floor_degC"])
+    mask = moving | frozen
 
     out = []
     for i0, i1 in _true_runs(mask.to_numpy()):
@@ -80,33 +88,45 @@ def detect_flatline(df, ch: ChannelInfo, channels, cfg, group_by) -> list[Anomal
     return out
 
 
-def detect_drift(df, ch: ChannelInfo, channels, cfg, group_by) -> list[Anomaly]:
-    """Deviation from the median of the other neighbours above threshold for long enough.
+def detect_drift(df, ch: ChannelInfo, channels, cfg, group_by, phases=None) -> list[Anomaly]:
+    """Change in a channel's offset from its neighbours, relative to a reference window.
 
-    Leave-one-out median: the channel under test is excluded from its own
-    reference, so a single bad channel cannot drag the reference towards itself.
+    offset(t) = channel - median of the other neighbours (leave-one-out, so a
+    bad channel cannot drag its own reference). Normal spatial gradients (for
+    example a bus front-to-rear offset of several degC) are a constant offset
+    and cancel out; only a change from the reference-window offset is flagged.
+    Checked from the start of the reference window to the end of the run, so
+    the developing gradient during a pull-down is not mistaken for drift.
     """
     others = neighbours(ch, channels, group_by)
     if len(others) < 2:
         return []
+    ref = resolve_window(phases or [], cfg["reference_window"])
+    if ref is None:
+        return []
     t, dt = df["time_s"].to_numpy(), _dt(df)
-    dev = df[ch.name] - df[others].median(axis=1)
-    dev = dev.rolling(_samples(cfg["smoothing_s"], dt), center=True, min_periods=1).mean()
-    mask = dev.abs() > cfg["threshold_degC"]
+    t_min = t / 60.0
+    offset = df[ch.name] - df[others].median(axis=1)
+    offset = offset.rolling(_samples(cfg["smoothing_s"], dt), center=True, min_periods=1).mean()
+    in_ref = (t_min >= ref.start_min) & (t_min <= ref.end_min)
+    baseline = float(offset[in_ref].median())
+    change = offset - baseline
+    mask = (change.abs() > cfg["threshold_degC"]) & (t_min >= ref.start_min)
 
     out = []
     for i0, i1 in _true_runs(mask.to_numpy()):
         if _duration_s(t, i0, i1) >= cfg["min_duration_s"]:
-            seg = dev.iloc[i0:i1]
+            seg = change.iloc[i0:i1]
             out.append(_make("drift", ch.name, t, i0, i1, {
-                "max_abs_deviation_degC": seg.abs().max(),
-                "mean_deviation_degC": seg.mean(),
+                "baseline_offset_degC": baseline,
+                "max_abs_offset_change_degC": seg.abs().max(),
+                "mean_offset_change_degC": seg.mean(),
                 "threshold_degC": cfg["threshold_degC"],
             }))
     return out
 
 
-def detect_spike(df, ch: ChannelInfo, channels, cfg, group_by) -> list[Anomaly]:
+def detect_spike(df, ch: ChannelInfo, channels, cfg, group_by, phases=None) -> list[Anomaly]:
     """Excursion from a long centred rolling median that recovers within max_duration_s.
 
     An excursion at the very start or end of the record cannot be shown to
@@ -178,22 +198,29 @@ def detect_time_gaps(df, cfg) -> list[Anomaly]:
             for i in np.flatnonzero(steps > limit)]
 
 
-def detect_anomalies(df: pd.DataFrame, channels: list[ChannelInfo], cfg: dict) -> list[Anomaly]:
+def detect_anomalies(df: pd.DataFrame, channels: list[ChannelInfo], cfg: dict,
+                     phases: list[Phase] | None = None) -> tuple[list[Anomaly], list[str]]:
+    """Run every check. Returns (anomalies, notes); notes say which checks were skipped."""
     group_by = cfg["neighbour_group_by"]
+    notes: list[str] = []
+    if resolve_window(phases or [], cfg["drift"]["reference_window"]) is None:
+        notes.append(f"Drift check skipped: reference window {cfg['drift']['reference_window']} "
+                     "not found in this run")
+
     found: list[Anomaly] = detect_time_gaps(df, cfg["missing"])
     for ch in channels:
         found += detect_missing_or_out_of_range(df, ch, cfg["missing"])
-        found += detect_flatline(df, ch, channels, cfg["flatline"], group_by)
-        found += detect_drift(df, ch, channels, cfg["drift"], group_by)
-        found += detect_spike(df, ch, channels, cfg["spike"], group_by)
+        for check, key in ((detect_flatline, "flatline"), (detect_drift, "drift"),
+                           (detect_spike, "spike")):
+            found += check(df, ch, channels, cfg[key], group_by, phases)
     found.sort(key=lambda a: (a.start_min, a.channel))
     for k, a in enumerate(found, start=1):
         a.id = f"A{k:02d}"  # stable IDs the commentary can refer to
-    return found
+    return found, notes
 
 
-def exclusions(anomalies: list[Anomaly], types: list[str]) -> dict[str, list[tuple[float, float]]]:
-    """Channel -> list of (start_min, end_min) to leave out of metrics."""
+def suspect_spans(anomalies: list[Anomaly], types: list[str]) -> dict[str, list[tuple[float, float]]]:
+    """Channel -> list of (start_min, end_min) where it is suspect for metrics."""
     out: dict[str, list[tuple[float, float]]] = {}
     for a in anomalies:
         if a.type in types:
