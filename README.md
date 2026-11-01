@@ -91,7 +91,8 @@ The system prompt is `prompts/system_interpretation.txt`. Edit the wording there
 
 Keep these rules in the prompt, because the validator enforces them and a draft that breaks them is rejected:
 
-- Quote numbers exactly as they appear in the summary, with no calculation or unit conversion.
+- Quote numbers exactly as they appear in the summary, with their units and no calculation or unit conversion.
+- Name the channel or anomaly ID in any sentence that quotes one channel's or one anomaly's value. The validator only accepts channel and anomaly values in sentences that name them.
 - Explain every anomaly ID once, and put new findings under `model_suggested_anomalies`.
 - Write one sentence per criterion, using the criterion name exactly.
 
@@ -108,6 +109,6 @@ After you change the prompt, run one known test with `--interpret` and read the 
 
 ## Known limits
 
-- **The number tolerance is loose for small values.** The floor of 0.1 units is set in the brief. On the synthetic run, 43 % of random values between 0 and 5 would match some summary value, so the validator rarely catches an invented small number. It is strong for values above 5.
+- **Small numbers are only partly checked.** The 0.1-unit tolerance floor comes from the brief. A number must match a summary value with the same unit, in a scope the sentence names, but small gradients and margins still sit close together. On the synthetic run, the checker accepts 25 % of invented values between 0 and 5 degC (42 % without the unit and scope rules) and 3 % between 20 and 45 degC (24 % without them).
 - **Drift is only checked from the start of its reference window.** It isn't checked during the pull-down.
 - **A flatline on a channel without neighbours goes undetected.** Neighbour groups need at least 3 channels.

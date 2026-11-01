@@ -80,6 +80,15 @@ class AnthropicClient:
                             model=resp.model, stop_reason=resp.stop_reason)
 
 
+def _evidence_phrase(key: str, value: float) -> str:
+    """'max_abs_offset_change_degC', 3.12 -> 'max abs offset change 3.12 degC'."""
+    for suffix in ("_degC", "_s", "_min"):
+        if key.endswith(suffix):
+            return f"{key[:-len(suffix)].replace('_', ' ')} {value:g} {suffix[1:]}"
+    unit = " degC" if key in ("min_value", "max_value", "range_low", "range_high") else ""
+    return f"{key.replace('_', ' ')} {value:g}{unit}"
+
+
 class MockClient:
     """Offline stand-in. Quotes only values present in the summary."""
 
@@ -130,7 +139,7 @@ class MockClient:
 
         expl = []
         for a in s.anomalies:
-            ev = ", ".join(f"{k.replace('_', ' ')} {v:g}" for k, v in a.evidence.items())
+            ev = ", ".join(_evidence_phrase(k, v) for k, v in a.evidence.items())
             expl.append({
                 "anomaly_id": a.id,
                 "likely_cause": f"Mock explanation of a {a.type} on {a.channel}.",

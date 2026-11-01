@@ -72,7 +72,7 @@ def test_rejects_made_up_number_and_names_sentence(summary, good):
     with pytest.raises(CommentaryValidationError) as e:
         validate(c, summary)
     msg = str(e.value)
-    assert "19.4 not found" in msg
+    assert "19.4 degC not found" in msg and "95 min not found" in msg
     assert 'Sentence: "The coolest seat reached 19.4 degC at 95 min."' in msg
     assert "results_commentary[0]" in msg
 
@@ -102,14 +102,63 @@ def test_sign_and_unicode_minus_accepted(summary, good):
     validate(_with_paragraph(good, "The gradient was −2.61 degC, a magnitude of 2.61 degC."), summary)
 
 
-def test_small_numbers_are_weakly_checked(summary, good):
-    """Known limit of the 0.1-unit floor: most small numbers match something.
-    This documents the behaviour so a change to it is deliberate."""
-    allowed = summary_numbers(summary)
+def _false_pass_rate(summary, good, values, unit, strict=True):
+    """Share of invented values that the checker would accept in a sentence
+    naming no channel or anomaly."""
     from interpret.validate import matches
-    small = [x / 10 for x in range(0, 50)]           # 0.0 to 4.9
-    hit = sum(matches(x, allowed, 0.005, 0.1) for x in small)
-    assert hit / len(small) > 0.3  # measured 43 % on the faulty fixture, values 0 to 5
+    if not strict:
+        allowed = summary_numbers(summary)
+        return sum(matches(v, allowed, 0.005, 0.1) for v in values) / len(values)
+    passed = 0
+    for v in values:
+        c = _with_paragraph(good, f"A reading of {v:.2f} {unit} was noted.")
+        try:
+            validate(c, summary)
+            passed += 1
+        except CommentaryValidationError:
+            pass
+    return passed / len(values)
+
+
+@pytest.mark.parametrize("lo, hi, max_rate", [(0, 5, 0.45), (20, 45, 0.25)])
+def test_unit_and_scope_cut_false_passes(summary, good, lo, hi, max_rate):
+    """Invented degC values: the unit- and scope-aware check accepts far fewer
+    than the loose any-number check. Rates are measured on the faulty fixture."""
+    values = [lo + (hi - lo) * k / 200 for k in range(200)]
+    loose = _false_pass_rate(summary, good, values, "degC", strict=False)
+    strict = _false_pass_rate(summary, good, values, "degC", strict=True)
+    print(f"degC {lo}-{hi}: loose {loose:.0%}, strict {strict:.0%}")
+    assert strict < loose
+    assert strict <= max_rate
+
+
+def test_channel_value_needs_channel_named(summary, good):
+    # Frozen head sensor: its stabilised mean (about 29.05 degC) is unlike any global value.
+    ch = next(c for c in summary.channels if c.name == "tc_r1_r_head")
+    v = ch.phase_means["stabilised"]
+    with pytest.raises(CommentaryValidationError, match="values of tc_r1_r_head.*does not name"):
+        validate(_with_paragraph(good, f"One head sensor averaged {v:g} degC."), summary)
+    validate(_with_paragraph(good, f"Channel tc_r1_r_head averaged {v:g} degC."), summary)
+
+
+def test_wrong_unit_fails(summary, good):
+    with pytest.raises(CommentaryValidationError, match="only with unit degC"):
+        validate(_with_paragraph(good, "The cabin mean was 23.51 min."), summary)
+
+
+def test_anomaly_values_need_id_outside_explanation(summary, good):
+    a = summary.anomalies[0]
+    sentence = f"The fault lasted from {a.start_min:g} to {a.end_min:g} min."
+    with pytest.raises(CommentaryValidationError, match=f"values of {a.id}.*does not name"):
+        validate(_with_paragraph(good, sentence), summary)
+    validate(_with_paragraph(good, f"Anomaly {a.id} lasted from {a.start_min:g} to {a.end_min:g} min."), summary)
+
+
+def test_anomaly_values_allowed_in_own_explanation(summary, good):
+    d = copy.deepcopy(good)
+    a = summary.anomalies[0]
+    d["anomaly_explanations"][0]["evidence"] = f"It ran between {a.start_min:g} and {a.end_min:g} min."
+    validate(Commentary.model_validate(d), summary)
 
 
 def test_numbers_in_every_field_are_checked(summary, good):

@@ -5,6 +5,8 @@ You receive one test summary as JSON. Python computed every number in it from th
 Numbers
 - Quote numbers exactly as they appear in the summary, with their units. Do not calculate, convert units, add, subtract, average, or derive percentages. If a value you want is not in the summary, describe it in words without a number.
 - An automatic checker compares every number you write against the summary and rejects the draft if one does not match. Spelling out a number does not avoid the check; leave it out instead.
+- Give every number its unit exactly as the summary does (degC, min, s). Counts such as the number of channels take no unit.
+- When you quote a value that belongs to one channel (its min, max or phase mean), name that channel in the same sentence. When you quote an anomaly's times or evidence outside its own explanation, name its ID or channel in the same sentence.
 - Refer to channels by the names in the summary and to anomalies by their IDs (for example A01).
 
 Criteria
